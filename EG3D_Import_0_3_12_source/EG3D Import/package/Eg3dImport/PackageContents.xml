@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ApplicationPackage
+    SchemaVersion="1.0"
+    AutodeskProduct="3ds Max"
+    ProductType="Application"
+    Name="Eg3dImport"
+    Description="EG3D Import - 300 Heroes (.model / .x) fuer 3ds Max"
+    AppVersion="0.1.0"
+    FriendlyVersion="0.1.0"
+    Author="DH"
+    UpgradeCode="{3F71A25C-6E04-4B19-9D83-C21A70E5F468}"
+    ProductCode="{A0C42D18-95FB-4E63-8172-DB3095C7A014}">
+
+    <!-- Alles hier gegen die "Autodesk Application Plug-in Package Format
+         Specification" fuer 3ds Max geprueft, nicht aus einem anderen
+         Projekt uebernommen. tools\PRUEFE_PAKET.py prueft es nach.
+
+         Pflicht bei 3ds Max: AutodeskProduct, ProductType, AppVersion
+         (Form MMM.mmm.bbb) und UpgradeCode.
+
+         ProductCode ist bei 3ds Max ANDERS als bei AutoCAD nur optional -
+         die Doku sagt das ausdruecklich. Gebraucht wird er erst beim
+         Hochladen in den Autodesk App Store; dann bei jeder Aenderung von
+         AppVersion neu vergeben. UpgradeCode dagegen ist die dauerhafte
+         Kennung und darf sich NIE aendern: Max laedt je UpgradeCode nur ein
+         Paket, und zwar das mit der hoeheren AppVersion.
+
+         FriendlyVersion steht nicht in der Max-Spezifikation, sondern kommt
+         aus der AutoCAD-/App-Store-Welt. Schadet nicht und wird beim
+         Hochladen gebraucht, deshalb bleibt es stehen.
+
+         Beim naechsten Versionssprung: AppVersion, FriendlyVersion, alle
+         Version="0.1.0", ProductCode, EG3DIMPORT_VERSION_STR in
+         eg3dimport.h und sExpectedVersion in Eg3dImport.mcr. PRUEFE_PAKET.py
+         vergleicht die drei letzten miteinander. -->
+
+    <!-- <CompanyDetails> ist PFLICHT. Fehlt der Knoten, laedt das Plugin
+         nicht - auch wenn sonst alles stimmt und ohne verwertbare Meldung.
+         Der Inhalt ist dagegen egal. -->
+    <CompanyDetails Name="DH" />
+
+    <RuntimeRequirements OS="Win64" Platform="3ds Max" SeriesMin="2016" SeriesMax="2027" />
+
+    <!-- ========================================================
+         1. Das Plugin selbst.
+
+         Pro Max-Version ein eigener Block mit SeriesMin = SeriesMax.
+         Die Doku ist dazu deutlich: "3ds Max does not test for binary
+         compatibility." Ein Block mit SeriesMin="2016" SeriesMax="2027"
+         wuerde also EINE DLU in alle zwoelf Jahrgaenge laden - und eine
+         gegen das 2016er SDK gebaute DLU in 2027 endet im Absturz, nicht
+         in einer Meldung.
+
+         Umgekehrt gilt dasselbe: ein zu enger Bereich laedt gar nicht.
+         Steht dort 2015 und laeuft 2016, wird das Plugin uebersprungen,
+         obwohl es binaerkompatibel waere.
+
+         Skripte sind davon nicht betroffen - die teilen sich einen Block
+         ueber den ganzen Bereich (siehe unten).
+
+         Nicht installierte SDKs fehlen im output-Ordner; INSTALLIERE.bat
+         ueberspringt sie dann, und der Block hier laeuft ins Leere. Das
+         ist unschaedlich: Max meldet eine fehlende Datei im max.log.
+         ======================================================== -->
+
+    <Components Description="plugins parts">
+        <RuntimeRequirements OS="Win64" Platform="3ds Max" SeriesMin="2016" SeriesMax="2016" />
+        <ComponentEntry AppName="Eg3dImport" Version="0.1.0"
+                        ModuleName="./Contents/2016/Eg3dImport.dlu"
+                        AppDescription="EG3D Import (300 Heroes)" />
+    </Components>
+
+    <Components Description="plugins parts">
+        <RuntimeRequirements OS="Win64" Platform="3ds Max" SeriesMin="2017" SeriesMax="2017" />
+        <ComponentEntry AppName="Eg3dImport" Version="0.1.0"
+                        ModuleName="./Contents/2017/Eg3dImport.dlu"
+                        AppDescription="EG3D Import (300 Heroes)" />
+    </Components>
+
+    <Components Description="plugins parts">
+        <RuntimeRequirements OS="Win64" Platform="3ds Max" SeriesMin="2018" SeriesMax="2018" />
+        <ComponentEntry AppName="Eg3dImport" Version="0.1.0"
+                        ModuleName="./Contents/2018/Eg3dImport.dlu"
+                        AppDescription="EG3D Import (300 Heroes)" />
+    </Components>
+
+    <Components Description="plugins parts">
+        <RuntimeRequirements OS="Win64" Platform="3ds Max" SeriesMin="2019" SeriesMax="2019" />
+        <ComponentEntry AppName="Eg3dImport" Version="0.1.0"
+                        ModuleName="./Contents/2019/Eg3dImport.dlu"
+                        AppDescription="EG3D Import (300 Heroes)" />
+    </Components>
+
+    <Components Description="plugins parts">
+        <RuntimeRequirements OS="Win64" Platform="3ds Max" SeriesMin="2020" SeriesMax="2020" />
+        <ComponentEntry AppName="Eg3dImport" Version="0.1.0"
+                        ModuleName="./Contents/2020/Eg3dImport.dlu"
+                        AppDescription="EG3D Import (300 Heroes)" />
+    </Components>
+
+    <Components Description="plugins parts">
+        <RuntimeRequirements OS="Win64" Platform="3ds Max" SeriesMin="2021" SeriesMax="2021" />
+        <ComponentEntry AppName="Eg3dImport" Version="0.1.0"
+                        ModuleName="./Contents/2021/Eg3dImport.dlu"
+                        AppDescription="EG3D Import (300 Heroes)" />
+    </Components>
+
+    <Components Description="plugins parts">
+        <RuntimeRequirements OS="Win64" Platform="3ds Max" SeriesMin="2022" SeriesMax="2022" />
+        <ComponentEntry AppName="Eg3dImport" Version="0.1.0"
+                        ModuleName="./Contents/2022/Eg3dImport.dlu"
+                        AppDescription="EG3D Import (300 Heroes)" />
+    </Components>
+
+    <Components Description="plugins parts">
+        <RuntimeRequirements OS="Win64" Platform="3ds Max" SeriesMin="2023" SeriesMax="2023" />
+        <ComponentEntry AppName="Eg3dImport" Version="0.1.0"
+                        ModuleName="./Contents/2023/Eg3dImport.dlu"
+                        AppDescription="EG3D Import (300 Heroes)" />
+    </Components>
+
+    <Components Description="plugins parts">
+        <RuntimeRequirements OS="Win64" Platform="3ds Max" SeriesMin="2024" SeriesMax="2024" />
+        <ComponentEntry AppName="Eg3dImport" Version="0.1.0"
+                        ModuleName="./Contents/2024/Eg3dImport.dlu"
+                        AppDescription="EG3D Import (300 Heroes)" />
+    </Components>
+
+    <Components Description="plugins parts">
+        <RuntimeRequirements OS="Win64" Platform="3ds Max" SeriesMin="2025" SeriesMax="2025" />
+        <ComponentEntry AppName="Eg3dImport" Version="0.1.0"
+                        ModuleName="./Contents/2025/Eg3dImport.dlu"
+                        AppDescription="EG3D Import (300 Heroes)" />
+    </Components>
+
+    <Components Description="plugins parts">
+        <RuntimeRequirements OS="Win64" Platform="3ds Max" SeriesMin="2026" SeriesMax="2026" />
+        <ComponentEntry AppName="Eg3dImport" Version="0.1.0"
+                        ModuleName="./Contents/2026/Eg3dImport.dlu"
+                        AppDescription="EG3D Import (300 Heroes)" />
+    </Components>
+
+    <Components Description="plugins parts">
+        <RuntimeRequirements OS="Win64" Platform="3ds Max" SeriesMin="2027" SeriesMax="2027" />
+        <ComponentEntry AppName="Eg3dImport" Version="0.1.0"
+                        ModuleName="./Contents/2027/Eg3dImport.dlu"
+                        AppDescription="EG3D Import (300 Heroes)" />
+    </Components>
+
+    <!-- ========================================================
+         2. MacroScript - die Oberflaeche.
+         Landet unter Customize -> Customize User Interface ->
+         Category "DH Tools" und laesst sich von dort auch auf
+         eine Toolbar oder einen Shortcut legen.
+         ======================================================== -->
+
+    <Components Description="macroscripts parts">
+        <RuntimeRequirements OS="Win64" Platform="3ds Max" SeriesMin="2016" SeriesMax="2027" />
+
+        <!-- Platzhalter statt Dateiname. Die Spezifikation erlaubt ihn
+             ausdruecklich: "You can specify a wildcard in the file name,
+             such as *.ms". Nur im DATEINAMEN, nicht im Pfad.
+
+             Grund fuer den Platzhalter: eine Namensliste an zwei Stellen
+             zu pflegen - hier und in INSTALLIERE.bat - geht genau einmal
+             gut. In 0.1.0 stand in der .bat ein Name, den es nie gab
+             (Eg3dImportAlt.mcr, uebernommen aus dem BAF-Vorbild); die
+             Installation brach ab, obwohl alle zwoelf Plugins fertig
+             waren.
+
+             Achtung: "If a file is specified twice, 3ds Max will display
+             an error message." Also NICHT zusaetzlich einzelne
+             ComponentEntry-Zeilen fuer dieselben Dateien danebenstellen.
+
+             Anders als bei den Plugins reicht hier EIN Block ueber den
+             ganzen Bereich: ein Skript ist Text und hat keine
+             Binaerkompatibilitaet, die brechen koennte. -->
+        <ComponentEntry AppName="Eg3dImportUI" Version="0.1.0"
+                        ModuleName="./Contents/MacroScripts/*.mcr"
+                        AppDescription="Oberflaeche zum Importieren" />
+    </Components>
+
+    <!-- ========================================================
+         3. Kein Menue mehr.
+
+         Bis 1.0.1 lag hier ein Post-Start-Up-Skript, das ein
+         eigenes "DH Tools" anlegte. Das ist entfallen: EG3D
+         steht in Max' eigenem Dialog unter Datei -> Importieren,
+         eingetragen von der SceneImport-Klasse im Plugin.
+
+         Damit entfaellt auch der GUID-Konflikt, den ein
+         gemeinsames Untermenue ab Max 2025 ausloest:
+         CreateSubMenu LEGT dort AN und sucht nicht, zwei Pakete
+         koennen sich ein Untermenue also nicht teilen.
+
+         Nebeneffekt: der Konflikt ab Max 2025 ist damit weg.
+         CreateSubMenu legt dort an und sucht nicht, zwei Pakete
+         koennen sich ein Untermenue also nicht teilen - es
+         entstanden zwei gleichnamige Eintraege nebeneinander.
+
+         Das MacroScript oben bleibt registriert. Unter
+         Customize -> Customize User Interface -> Kategorie
+         "DH Tools" laesst es sich auf eine Toolbar oder einen
+         Shortcut legen, wer das lieber mag.
+         ======================================================== -->
+
+</ApplicationPackage>

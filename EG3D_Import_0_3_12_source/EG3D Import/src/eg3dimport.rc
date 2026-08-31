@@ -1,0 +1,17 @@
+// ============================================================
+//  EG3D Import - Ressourcen
+//
+//  Die Oberflaeche liegt als RCDATA in der DLL. Beim Systemstart
+//  schreibt eg3dimport_dll.cpp sie in den Temp-Ordner und liest
+//  sie ein - damit laeuft das Plugin auch ohne installierte
+//  .mcr-Datei.
+//
+//  Eine INSTALLIERTE Datei hat Vorrang (siehe
+//  InstalledScriptExists): wer die .mcr von Hand aendert, soll
+//  seine Fassung sehen und nicht die eingebackene.
+// ============================================================
+
+// 1000 ist kMcrResourceId in eg3dimport_dll.cpp. Beide Stellen
+// muessen denselben Wert haben; ein Zahlendreher ergibt keinen
+// Fehler, sondern eine Oberflaeche, die einfach nicht kommt.
+1000 RCDATA "../scripts/Eg3dImport.mcr"
