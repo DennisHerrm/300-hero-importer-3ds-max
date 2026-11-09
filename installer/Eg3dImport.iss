@@ -7,8 +7,10 @@
 ;  Ziel (Autodesk "Packaging Plug-ins"): 3ds Max durchsucht
 ;    %ProgramData%\Autodesk\ApplicationPlugins\<name>   alle Benutzer (Admin)
 ;    %AppData%\Autodesk\ApplicationPlugins\<name>       nur dieser Benutzer
-;  {autoappdata} ist je nach Installationsart genau einer der beiden Orte
-;  (PrivilegesRequiredOverridesAllowed=dialog: der Benutzer waehlt beim Start).
+;  Das Setup installiert NUR nach ProgramData (fuer alle Benutzer, mit
+;  Adminrechten) - wie KOTOR Import. Eine fruehere Installation in AppData
+;  (INSTALLIERE.bat, Fassungen bis 0.3.12) wird dabei entfernt, sonst laedt
+;  Max das Plugin zweimal.
 ;
 ;  Die .dlu braucht die Visual-C++-Laufzeit v14, gebaut mit MSVC 14.50 - die
 ;  Laufzeit muss mindestens so neu sein. vc_redist.x64.exe (von Microsoft
@@ -42,13 +44,11 @@ VersionInfoDescription=300 Heroes Import for 3ds Max - Setup
 VersionInfoCompany=DH
 VersionInfoCopyright=DH
 VersionInfoProductName=300 Heroes Import for 3ds Max
-DefaultDirName={autoappdata}\Autodesk\ApplicationPlugins\Eg3dImport
+DefaultDirName={commonappdata}\Autodesk\ApplicationPlugins\Eg3dImport
 DisableDirPage=yes
 DisableProgramGroupPage=yes
 DisableReadyPage=no
 PrivilegesRequired=admin
-PrivilegesRequiredOverridesAllowed=dialog
-UsePreviousPrivileges=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
