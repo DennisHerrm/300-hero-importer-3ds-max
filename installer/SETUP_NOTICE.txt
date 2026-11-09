@@ -1,0 +1,16 @@
+300 Heroes Import for 3ds Max 2016-2027
+
+DISCLAIMER
+Unofficial, free fan project. It is NOT made by, affiliated with, endorsed
+or sponsored by the makers or publishers of 300 Heroes or by Autodesk.
+300 Heroes is a product of its respective owners; 3ds Max is a trademark of
+Autodesk. No game data is included - the plugin reads model files from your
+own copy of the game.
+
+Requirements
+- Windows 10/11 64-bit, 3ds Max 2016-2027
+- Close 3ds Max before installing
+
+After installing: File -> Import -> "300 Heroes (EG3D)"
+
+https://github.com/DennisHerrm/300-hero-importer-3ds-max

@@ -224,13 +224,30 @@ def main():
                                  'ComponentEntry: ./%s' % rel)
 
     # ---- Versionsnummern im Quelltext ----
-    header = os.path.join(WURZEL, 'src', 'eg3dimport.h')
-    if appversion and os.path.isfile(header):
-        text = open(header, encoding='utf-8', errors='replace').read()
-        treffer = re.search(r'EG3DIMPORT_VERSION_STR\s+_T\("([^"]+)"\)', text)
-        if treffer and treffer.group(1) != appversion:
-            funde.append('EG3DIMPORT_VERSION_STR ist %r, AppVersion %r'
-                         % (treffer.group(1), appversion))
+    # Seit 0.4.0 steht die Nummer nur in src/eg3d_version.h. Bis dahin
+    # suchte diese Pruefung in eg3dimport.h - und schwieg, wenn sie
+    # nichts fand. So blieb "0.1.0" bis 0.3.12 stehen.
+    header = os.path.join(WURZEL, 'src', 'eg3d_version.h')
+    if appversion:
+        if not os.path.isfile(header):
+            funde.append('src/eg3d_version.h fehlt')
+        else:
+            text = open(header, encoding='utf-8', errors='replace').read()
+            treffer = re.search(r'EG3D_VERSION_TEXT\s+"([^"]+)"', text)
+            teile = [re.search(r'EG3D_VERSION_%s\s+(\d+)' % n, text)
+                     for n in ('MAJOR', 'MINOR', 'PATCH')]
+            if not treffer:
+                funde.append('EG3D_VERSION_TEXT nicht gefunden')
+            elif treffer.group(1) != appversion:
+                funde.append('EG3D_VERSION_TEXT ist %r, AppVersion %r'
+                             % (treffer.group(1), appversion))
+            if all(teile):
+                zahl = '.'.join(t.group(1) for t in teile)
+                if zahl != appversion:
+                    funde.append('EG3D_VERSION_MAJOR/MINOR/PATCH ergeben %r, '
+                                 'AppVersion %r' % (zahl, appversion))
+            else:
+                funde.append('EG3D_VERSION_MAJOR/MINOR/PATCH unvollstaendig')
 
     if funde:
         for eintrag in funde:

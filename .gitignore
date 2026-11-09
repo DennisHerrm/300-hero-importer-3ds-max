@@ -1,0 +1,8 @@
+# Build- und Release-Ausgaben
+build_*/
+output/
+dist/
+installer/redist/
+vergleich_*.txt
+*.log
+EG3D_Import_0_3_12_source/

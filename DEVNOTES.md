@@ -55,6 +55,33 @@ Wer es als Bind-Pose nimmt, bekommt ein Modell, das in der Ruhestellung
 schon halb in einer Animation steht. Die Bind-Pose steht ausschließlich
 in den inversen Bindmatrizen der Palette (meta[4]).
 
+**Die inversen Bindmatrizen sind relativ zum MESH-KNOTEN** (Stand 0.4.0,
+über alle 45 `.model`-Dateien nachgemessen). Bind-Pose in der Welt:
+
+```
+Bone_bind_welt = MeshWelt · inv(IBM)        (Spaltenvektoren)
+Vertex_bind    = MeshWelt · v
+Vertex_anim    = Σ w · Welt_bone(t) · IBM · v   (MeshWelt kürzt sich heraus)
+```
+
+`MeshWelt` ist die meta[5]-Weltmatrix des Knotens, an dem die Instanz hängt.
+Jeder dieser Knoten trägt die Drehung Z-up → Y-up (90°, bei Heimkehr-Clips
+120°) und oft einen eigenen Maßstab: 039_skin8 0,5924 (der rätselhafte
+„Bindfaktor 1,688, dem nur 91 von 176 Bones folgen“ – es ist das eine Mesh
+mit 91 Palettenbones), 149_skin13 0,4, 156_skin10 1,761, 215_skin9 0,7045,
+234_skin10_huicheng 21,35, 289_96 6,536.
+
+Belege: Bei 336_skin1, 039_skin8, 110_skin5, 212_skin12 und 215_skin9 ist
+meta[5] zufällig die Bind-Pose, und dort gilt `Welt = MeshWelt · inv(IBM)` bis
+auf 10⁻⁷. Bones in mehreren Paletten ergeben über jede Palette dieselbe
+Weltlage (höchstens 1 % Abweichung, meist 10⁻⁷). Im Max-Plugin nachgerechnet:
+Bind-Pose aufs 10⁻⁶, Frame 0 aller Knoten aufs 5·10⁻⁶.
+
+Wer `inv(IBM)` allein als Bind-Pose nimmt, hat Bind-Pose und Animation in
+zwei Räumen: in Max stand die Figur bis 0.3.12 in der Bind-Pose und lag in
+der Animation auf dem Rücken; die Katze 234 sprang beim Übergang auf das
+18-Fache.
+
 ### Attribut-Deskriptoren
 
 Deskriptoren sind **6 oder 8 Felder** lang; 8 heißt „mit scale/bias".

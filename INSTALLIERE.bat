@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================
-REM  EG3D Import 0.2.0 - Paket erstellen + installieren
+REM  EG3D Import - Paket erstellen + installieren
 REM
 REM  1. Baut die Paketstruktur aus output\ und scripts\
 REM  2. Kopiert das fertige Paket nach ApplicationPlugins

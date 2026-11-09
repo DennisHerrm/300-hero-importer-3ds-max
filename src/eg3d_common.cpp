@@ -232,11 +232,24 @@ bool IsPureAscii(const std::string& raw) {
 
 } // namespace
 
-std::string GbkToUtf8(const std::string& raw) {
+std::string GbkToUtf8(const std::string& rawIn) {
     // Reines ASCII bleibt, wie es ist - das ist der Normalfall.
     // Die Umwandlung darf einen Namen wie "Bip001 L Hand" nicht
     // anfassen.
-    if (IsPureAscii(raw)) return raw;
+    if (IsPureAscii(rawIn)) return rawIn;
+
+    // Namen koennen auf einem ABGESCHNITTENEN Doppelbyte enden
+    // (020_skin2.x: Mesh "阿尔" + ein einzelnes Leitbyte). Windows
+    // macht daraus ein "?", das Blender-Addon laesst es weg. Hier
+    // wie im Addon: das unvollstaendige Ende abschneiden.
+    std::string raw = rawIn;
+    for (size_t i = 0; i < raw.size();) {
+        const unsigned char c = static_cast<unsigned char>(raw[i]);
+        if (c < 0x80) { ++i; continue; }
+        if (i + 1 >= raw.size()) { raw.resize(i); break; }
+        i += 2;
+    }
+    if (raw.empty() || IsPureAscii(raw)) return raw;
 
 #ifdef _WIN32
     // Unter Windows die echte Codepage 936 benutzen. Sie kennt

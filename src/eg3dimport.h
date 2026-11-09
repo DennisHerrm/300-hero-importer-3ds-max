@@ -12,8 +12,13 @@
 #ifndef EG3D_IMPORT_H
 #define EG3D_IMPORT_H
 
-#define EG3DIMPORT_VERSION_STR _T("0.1.0")
-#define EG3DIMPORT_VERSION_NUM 100
+// Die Nummer steht nur noch in eg3d_version.h. Bis 0.3.12 stand
+// hier "0.1.0", unveraendert seit dem ersten Stand - der Max-Dialog
+// und das Protokoll zeigten also eine Version, die es nicht gab.
+#include "eg3d_version.h"
+#define EG3DIMPORT_VERSION_STR _T(EG3D_VERSION_TEXT)
+#define EG3DIMPORT_VERSION_NUM \
+    (EG3D_VERSION_MAJOR * 10000 + EG3D_VERSION_MINOR * 100 + EG3D_VERSION_PATCH)
 
 // ------------------------------------------------------------
 //  Klassen-IDs
@@ -51,6 +56,7 @@
 #include <notetrck.h>   // DefNoteTrack, NoteKey, NoteKeyTab
 #include <modstack.h>   // IDerivedObject
 #include <iskin.h>      // ISkin, ISkinImportData
+#include <iSkinPose.h>  // ISkinPose - Bind-Pose als Skin Pose ablegen
 #include <control.h>    // Control, NewDefaultFloatController
 #include <decomp.h>     // AffineParts, decomp_affine
 #include <maxscript/maxscript.h>   // ExecuteMAXScriptScript
@@ -300,6 +306,17 @@ struct ImportOptions {
     //  Wer die Ruhepose sehen will, schaltet sie wieder ein -
     //  dann ist der Uebergang sichtbar, aber er ist dann auch
     //  gewollt.
+    //
+    //  SEIT 0.4.0 (nachgemessen): beides oben war nur halb richtig.
+    //  (1) Der Sprung kam aus den zwei Raeumen - mit engineSpace
+    //      liegen Bind-Pose und Animation im selben Raum, zwischen
+    //      Frame 0 und 5 aendert sich nur noch die Pose (039_skin8:
+    //      Pelvis 12 Grad, Kopf 4 Grad statt 90 Grad + Faktor 1.688).
+    //  (2) Frame 0 trug gar nicht die Bind-Pose: UseLinearControllers
+    //      hatte sie geloescht, Max zeigte vor dem ersten Key dessen
+    //      Wert. SwapControllersKeepBind setzt jetzt einen echten
+    //      Key bei Frame 0. Standard bleibt 0 - die Bind-Pose liegt
+    //      ohnehin als Skin Pose an jedem Knoten.
     int   restFrames = 0;
 
     // ------------------------------------------------------
@@ -637,6 +654,54 @@ struct ImportOptions {
     bool  bindIncludesMesh = false;
 
     // ------------------------------------------------------
+    //  Bind-Pose und Animation in EINEM Raum (seit 0.4.0)
+    //
+    //  Nachgemessen an allen 45 .model-Dateien: die inversen
+    //  Bindmatrizen sind RELATIV ZUM MESH-KNOTEN gespeichert,
+    //  nicht zur Welt. Jeder Mesh-Knoten traegt die 90-Grad-
+    //  Drehung Z-up -> Y-up und oft einen eigenen Massstab
+    //  (039_skin8: 0.5924, 149_skin13: 0.4, 156_skin10: 1.761,
+    //  234_skin10_huicheng: 21.35, 289_96: 6.536).
+    //
+    //  Beweis: bei fuenf Dateien ist meta[5] genau die Bind-Pose,
+    //  und dort gilt Welt = MeshWelt * inv(IBM) bis auf 1e-7.
+    //  Bones in mehreren Paletten ergeben ueber jede Palette
+    //  dieselbe Weltlage.
+    //
+    //  Bis 0.3.12 stand die Bind-Pose auf inv(IBM) OHNE den
+    //  Mesh-Knoten, die Animation dagegen im Engine-Raum. In Max
+    //  stand die Figur deshalb in der Bind-Pose und lag in der
+    //  Animation auf dem Ruecken, bei skalierten Mesh-Knoten
+    //  zusaetzlich mit Groessensprung (Katze 234: x18). Wer die
+    //  Bind-Pose behalten wollte (Ruheframes), sah den Sprung.
+    //
+    //  AN (Standard): alles im Engine-Raum, beim Uebergang nach
+    //  Max genau EINMAL Y-up -> Z-up (UpAxisMatrix):
+    //      Bone (Bind)      = inv(IBM) * MeshWelt * G
+    //      Skin-Bindlage    = dieselbe Matrix
+    //      gehaeutetes Mesh = MeshWelt * G, Vertices unveraendert
+    //      Animation        = Welt(t) * G
+    //  Die Deformation ist damit in der Animation exakt die der
+    //  Engine (v * IBM * Welt) - und die Bind-Pose liegt im selben
+    //  Raum. bindIncludesMesh, upAxisFix und meshAxisFix werden
+    //  dabei nicht gebraucht und ignoriert.
+    //
+    //  AUS: Verhalten von 0.3.12.
+    // ------------------------------------------------------
+    bool  engineSpace = true;
+
+    // ------------------------------------------------------
+    //  Bind-Pose als Max-"Skin Pose" ablegen
+    //
+    //  Die Animation ueberschreibt Frame 0. Damit die Bind-Pose
+    //  trotzdem erhalten bleibt, bekommt jeder Knoten sie als
+    //  Skin Pose (ISkinPose, Position, Drehung UND Massstab).
+    //  In Max zurueckholen: Animation -> Assume Skin Pose, oder
+    //  Skin Pose Mode.
+    // ------------------------------------------------------
+    bool  storeSkinPose = true;
+
+    // ------------------------------------------------------
     //  Den gemessenen Massstab auf Ruhelage UND Animation
     //  anwenden.
     //
@@ -810,6 +875,12 @@ private:
     void BuildModelMeshes(const ModelFile& file);
     bool BuildModelSkin(const ModelFile& file);
     void BuildModelAnimation(const ModelFile& file);
+    // Figur je Knoten fuer die Layer-Sortierung (Benutzereigenschaft
+    // "eg3d_model"), siehe Kommentar in der Implementierung.
+    void TagModelGroups(const ModelFile& file);
+    // Lineare Controller einsetzen, OHNE die Bind-Pose zu verlieren;
+    // legt sie als Skin Pose ab und bei Ruheframes als Key bei 0.
+    void SwapControllersKeepBind(const std::vector<int>& parents);
 
     // ---- .x ----
     void BuildXBones(const XFile& file);

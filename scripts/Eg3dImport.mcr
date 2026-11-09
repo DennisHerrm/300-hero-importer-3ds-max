@@ -281,12 +281,19 @@ Material Editor - der Rest steht ueber Get Material -> Scene bereit.\n" \
                 local iMoved = 0
                 for o in aSource do
                 (
-                    local root = topAncestor o
+                    -- Seit 0.4.0 setzt das Plugin bei .model die Figur
+                    -- selbst ("eg3d_model", aus Paletten und Mesh-
+                    -- Knoten bestimmt). Ohne die Eigenschaft (.x) gilt
+                    -- weiter der oberste Vorfahr.
+                    local sModel = getUserProp o "eg3d_model"
+                    if sModel == undefined or sModel == "" then
+                        sModel = (topAncestor o).name
+                    sModel = sModel as string
                     local sKind = "Mesh"
                     if (isKindOf o BoneGeometry) or (isKindOf o Point) or \
                        (isKindOf o Dummy) then sKind = "Bones"
 
-                    local sName = root.name + " " + sKind
+                    local sName = sModel + " " + sKind
                     local lay = LayerManager.getLayerFromName sName
                     if lay == undefined then
                         lay = LayerManager.newLayerFromName sName

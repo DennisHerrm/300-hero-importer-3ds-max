@@ -166,6 +166,61 @@ Matrix44 UpAxisMatrix() {
     return m;
 }
 
+// ------------------------------------------------------------
+//  Engine-Raum (Y-up) -> Max (Z-up), siehe
+//  ImportOptions::engineSpace. JEDE Weltmatrix der .model-Szene
+//  geht genau einmal hier durch - Bind-Pose, Skin-Bindlage,
+//  Mesh-Knoten und Animation. Nur dann bleibt die Deformation
+//  v * IBM * Welt unveraendert und Bind-Pose und Animation
+//  liegen im selben Raum.
+// ------------------------------------------------------------
+//
+//  Die Matrix ist Y-up -> Z-up UND 180 Grad um Z:
+//
+//      (x, y, z)  ->  (-x, z, y)
+//
+//  Ohne die halbe Drehung schaute eine .model-Figur nach +Y,
+//  eine .x-Figur nach -Y (am Render nachgesehen, 013.x gegen
+//  336_skin1.model). -Y ist die Max-Konvention: die
+//  Front-Ansicht zeigt das Gesicht. Reine Drehung (det = +1),
+//  keine Spiegelung - die Haendigkeit bleibt.
+Matrix44 EngineToMaxMatrix() {
+    Matrix44 m;
+    m.m[0][0] = -1.0f; m.m[0][1] = 0.0f; m.m[0][2] = 0.0f; m.m[0][3] = 0.0f;
+    m.m[1][0] = 0.0f;  m.m[1][1] = 0.0f; m.m[1][2] = 1.0f; m.m[1][3] = 0.0f;
+    m.m[2][0] = 0.0f;  m.m[2][1] = 1.0f; m.m[2][2] = 0.0f; m.m[2][3] = 0.0f;
+    m.m[3][0] = 0.0f;  m.m[3][1] = 0.0f; m.m[3][2] = 0.0f; m.m[3][3] = 1.0f;
+    return m;
+}
+
+Matrix44 MaxSpace(const Matrix44& world, bool on) {
+    return on ? MatMul(world, EngineToMaxMatrix()) : world;
+}
+
+// ------------------------------------------------------------
+//  Bind-Pose als Max-Skin-Pose ablegen (ImportOptions::
+//  storeSkinPose). Aufzurufen, solange Frame 0 noch die Bind-Pose
+//  zeigt - also VOR dem Aufbau der Animation.
+//
+//  Alle drei Anteile einschalten: in den Bind-Posen steckt
+//  Massstab (Mesh-Knoten mit 0.59, 1.76, 21.35 ...), und Max
+//  laesst Skalierung in der Skin Pose standardmaessig weg.
+// ------------------------------------------------------------
+int StoreSkinPose(const std::vector<INode*>& nodes) {
+    int stored = 0;
+    for (INode* node : nodes) {
+        if (node == nullptr) continue;
+        ISkinPose* pose = ISkinPose::GetISkinPose(*node);
+        if (pose == nullptr) continue;
+        pose->EnableSkinPos(true);
+        pose->EnableSkinRot(true);
+        pose->EnableSkinScale(true);
+        pose->SetSkinPose(0);
+        ++stored;
+    }
+    return stored;
+}
+
 Point3 ToPoint3(const Vec3& v, float scale = 1.0f) {
     return Point3(v.x * scale, v.y * scale, v.z * scale);
 }
@@ -1213,7 +1268,10 @@ void SceneBuilder::BuildModelNodes(const ModelFile& file) {
             }
 
             // ... und die Mesh-Transformation wieder hinein.
-            if (options_.bindIncludesMesh && paletteHasMesh[pi]) {
+            // Mit engineSpace immer: die IBM sind relativ zum
+            // Mesh-Knoten gespeichert (siehe ImportOptions).
+            if ((options_.bindIncludesMesh || options_.engineSpace) &&
+                paletteHasMesh[pi]) {
                 world = MatMul(world, paletteMeshWorld[pi]);
             }
 
@@ -1373,7 +1431,8 @@ void SceneBuilder::BuildModelNodes(const ModelFile& file) {
         if (hasBind[i]) {
             // Weltmatrix direkt aus inv(IBM) - nichts zu
             // akkumulieren.
-            tm = ToMatrix3(bindWorld[i], options_.scale);
+            tm = ToMatrix3(MaxSpace(bindWorld[i], options_.engineSpace),
+                           options_.scale);
         } else {
             // Kein Bindeintrag: lokale Werte aus meta[5], ueber
             // die Elternkette in den Weltraum gerechnet.
@@ -1407,6 +1466,10 @@ void SceneBuilder::BuildModelNodes(const ModelFile& file) {
             if (parent != nullptr) {
                 Matrix3 parentTm = parent->GetNodeTM(0);
                 tm = tm * parentTm;
+            } else if (options_.engineSpace) {
+                // Wurzel: Engine-Raum -> Max, wie alle anderen
+                // Weltmatrizen. Die Kinder erben es ueber parentTm.
+                tm = tm * ToMatrix3(EngineToMaxMatrix(), 1.0f);
             }
 
             // KEINE Achsendrehung in der Ruhelage.
@@ -1520,7 +1583,7 @@ void SceneBuilder::BuildModelMeshes(const ModelFile& file) {
                 // "Use Time 0 as Reference Pose" stehen Skelett
                 // und Animation richtig, das Mesh liegt flach,
                 // und -90 um X stellt es auf.
-                mesh.setVert(v, options_.meshAxisFix
+                mesh.setVert(v, (options_.meshAxisFix && !options_.engineSpace)
                                     ? Point3(p.x * ms, p.z * ms, -p.y * ms)
                                     : ToPoint3(p, ms));
             }
@@ -1621,7 +1684,31 @@ void SceneBuilder::BuildModelMeshes(const ModelFile& file) {
             // deshalb die Achsenkorrektur SELBST tragen. Sonst
             // laegen seine Vertices im Y-up-Raum, waehrend die
             // Bones schon gedreht sind.
-            if (instance.palette >= 0 && options_.upAxisFix) {
+            if (options_.engineSpace) {
+                // Engine-Raum: die Vertices sind lokal zum
+                // Mesh-Knoten (dorthin zeigen auch die IBM). Das
+                // Objekt steht also auf der Weltlage des
+                // Mesh-Knotens - gehaeutet wie starr.
+                //
+                // Gehaeutet: aus meta[5], dieselbe Matrix, die in
+                // die Bind-Pose der Bones eingeht (paletteMeshWorld).
+                // Starr: auf der Lage des Traegers in der Szene, der
+                // es weiter unten als Kind bekommt und es dann durch
+                // die Animation mitnimmt (Welt(t) * v wie in der
+                // Engine).
+                Matrix3 meshTm;
+                if (instance.palette >= 0 &&
+                    static_cast<size_t>(instance.node) < restWorld_.size()) {
+                    meshTm = ToMatrix3(
+                        MaxSpace(restWorld_[static_cast<size_t>(instance.node)], true),
+                        options_.scale);
+                } else if (nodes_[static_cast<size_t>(instance.node)] != nullptr) {
+                    meshTm = nodes_[static_cast<size_t>(instance.node)]->GetNodeTM(0);
+                } else {
+                    meshTm = ToMatrix3(EngineToMaxMatrix(), 1.0f);
+                }
+                node->SetNodeTM(0, meshTm);
+            } else if (instance.palette >= 0 && options_.upAxisFix) {
                 Matrix3 meshTm = ToMatrix3(UpAxisMatrix(), 1.0f);
                 node->SetNodeTM(0, meshTm);
             }
@@ -1686,6 +1773,144 @@ void SceneBuilder::BuildModelMeshes(const ModelFile& file) {
             stats_.faces += faceCount;
         }
     }
+}
+
+// ============================================================
+//  .model - Figuren fuer die Layer
+//
+//  Die Oberflaeche sortiert in "<Figur> Bones" / "<Figur> Mesh".
+//  Bis 0.3.12 war die Figur der oberste Vorfahr eines Objekts -
+//  das gab zwei Fehler, die man im Layer-Explorer sah:
+//
+//    - gehaeutete Meshes haengen an der Wurzel, jedes bekam einen
+//      eigenen Layer ("g0_s0 Mesh", "g1_s0 Mesh" ...);
+//    - 039_skin8.model hat ZWEI Figuren unter einem Dateiknoten,
+//      beide landeten in "039_skin8 Bones".
+//
+//  Hier wird die Figur aus den Daten bestimmt: jeder Knoten zaehlt
+//  zu dem Teilbaum direkt unter der Wurzel, in dem er steht. Eine
+//  Palette verbindet die Teilbaeume ihrer Bones mit dem Teilbaum
+//  ihres Mesh-Knotens (Union-Find). Was dabei zusammenhaengt, ist
+//  eine Figur; benannt wird sie nach dem Mesh-Knoten mit den
+//  meisten Vertices (039_skin8.model: "039_skin8" und
+//  "144_skin10"). Teilbaeume ohne Mesh (Effektknoten) kommen zur
+//  groessten Figur.
+//
+//  Ergebnis: Benutzereigenschaft "eg3d_model" an jedem Knoten und
+//  Mesh. Das MacroScript liest sie, fehlt sie (.x), gilt weiter der
+//  oberste Vorfahr.
+// ============================================================
+void SceneBuilder::TagModelGroups(const ModelFile& file) {
+    const size_t count = file.nodes.size();
+    if (count == 0) return;
+
+    // Teilbaum direkt unter der Wurzel (die Wurzel selbst: sie selbst).
+    std::vector<int> branch(count, -1);
+    for (size_t n = 0; n < count; ++n) {
+        int at = static_cast<int>(n);
+        int guard = 0;
+        while (file.nodes[static_cast<size_t>(at)].parent >= 0 &&
+               file.nodes[static_cast<size_t>(file.nodes[static_cast<size_t>(at)].parent)]
+                       .parent >= 0 &&
+               ++guard < 4096) {
+            at = file.nodes[static_cast<size_t>(at)].parent;
+        }
+        branch[n] = at;
+    }
+
+    std::vector<int> link(count);
+    for (size_t n = 0; n < count; ++n) link[n] = static_cast<int>(n);
+    auto find = [&](int x) {
+        while (link[static_cast<size_t>(x)] != x) {
+            link[static_cast<size_t>(x)] = link[static_cast<size_t>(link[static_cast<size_t>(x)])];
+            x = link[static_cast<size_t>(x)];
+        }
+        return x;
+    };
+    auto unite = [&](int a, int b) {
+        a = find(a); b = find(b);
+        if (a != b) link[static_cast<size_t>(b)] = a;
+    };
+
+    for (const Instance& instance : file.instances) {
+        if (instance.node < 0 || static_cast<size_t>(instance.node) >= count) continue;
+        if (instance.palette < 0 ||
+            static_cast<size_t>(instance.palette) >= file.palettes.size()) continue;
+        const int own = branch[static_cast<size_t>(instance.node)];
+        for (int bone : file.palettes[static_cast<size_t>(instance.palette)].bones) {
+            if (bone >= 0 && static_cast<size_t>(bone) < count)
+                unite(own, branch[static_cast<size_t>(bone)]);
+        }
+    }
+
+    // Je Gruppe: Vertices und der groesste Mesh-Knoten als Name.
+    std::map<int, int> verts;
+    std::map<int, std::pair<int, int>> best;   // Gruppe -> (Vertices, Knoten)
+    for (const BuiltMesh& built : builtMeshes_) {
+        if (built.instance < 0 ||
+            static_cast<size_t>(built.instance) >= file.instances.size()) continue;
+        const Instance& instance = file.instances[static_cast<size_t>(built.instance)];
+        if (instance.node < 0 || static_cast<size_t>(instance.node) >= count) continue;
+        const int group = find(branch[static_cast<size_t>(instance.node)]);
+        int v = 0;
+        if (instance.group >= 0 && static_cast<size_t>(instance.group) < file.groups.size() &&
+            built.submesh >= 0 &&
+            static_cast<size_t>(built.submesh) <
+                file.groups[static_cast<size_t>(instance.group)].size()) {
+            v = static_cast<int>(file.groups[static_cast<size_t>(instance.group)]
+                                     [static_cast<size_t>(built.submesh)].positions.size());
+        }
+        verts[group] += v;
+        std::pair<int, int>& slot = best[group];
+        if (v > slot.first) slot = std::make_pair(v, instance.node);
+    }
+
+    int largest = -1;
+    int largestVerts = -1;
+    for (const auto& entry : verts) {
+        if (entry.second > largestVerts) { largestVerts = entry.second; largest = entry.first; }
+    }
+
+    auto nameOf = [&](int group) -> std::wstring {
+        auto it = best.find(group);
+        if (it == best.end() || it->second.first <= 0) {
+            if (largest >= 0) {
+                auto big = best.find(largest);
+                if (big != best.end())
+                    return Utf8ToWide(file.nodes[static_cast<size_t>(big->second.second)].name);
+            }
+            // Gar kein Mesh: der Name der Wurzel.
+            int root = group;
+            while (file.nodes[static_cast<size_t>(root)].parent >= 0)
+                root = file.nodes[static_cast<size_t>(root)].parent;
+            return Utf8ToWide(file.nodes[static_cast<size_t>(root)].name);
+        }
+        return Utf8ToWide(file.nodes[static_cast<size_t>(it->second.second)].name);
+    };
+
+    int tagged = 0;
+    std::map<std::wstring, int> perModel;
+    for (size_t n = 0; n < count && n < nodes_.size(); ++n) {
+        if (nodes_[n] == nullptr) continue;
+        const std::wstring model = nameOf(find(branch[n]));
+        nodes_[n]->SetUserPropString(_T("eg3d_model"), model.c_str());
+        ++perModel[model];
+        ++tagged;
+    }
+    for (const BuiltMesh& built : builtMeshes_) {
+        if (built.node == nullptr || built.instance < 0 ||
+            static_cast<size_t>(built.instance) >= file.instances.size()) continue;
+        const Instance& instance = file.instances[static_cast<size_t>(built.instance)];
+        if (instance.node < 0 || static_cast<size_t>(instance.node) >= count) continue;
+        const std::wstring model = nameOf(find(branch[static_cast<size_t>(instance.node)]));
+        built.node->SetUserPropString(_T("eg3d_model"), model.c_str());
+        ++tagged;
+    }
+
+    Msg line;
+    line << L"Figuren fuer die Layer: " << perModel.size();
+    for (const auto& entry : perModel) line << L" | " << entry.first << L" (" << entry.second << L" Knoten)";
+    Note(line);
 }
 
 // ============================================================
@@ -1850,16 +2075,26 @@ bool SceneBuilder::BuildModelSkin(const ModelFile& file) {
             //
             // Mit upAxisFix waere das inkonsistent - die Knoten
             // truegen dann eine Drehung, die Bindmatrix nicht.
-            if (options_.bindIncludesMesh &&
+            if (options_.engineSpace &&
+                static_cast<size_t>(instance.node) < restWorld_.size()) {
+                // Der EIGENE Mesh-Knoten dieser Instanz - dieselbe
+                // Matrix, auf der das Objekt steht (BuildModelMeshes).
+                // Dann kuerzt sich MeshWelt in der Deformation
+                // heraus, auch wenn eine Gruppe mehrfach instanziert
+                // ist (112_160.model) und die Bones ihre Bind-Pose
+                // von der ersten Instanz haben.
+                bind = MatMul(bind, restWorld_[static_cast<size_t>(instance.node)]);
+            } else if (options_.bindIncludesMesh &&
                 static_cast<size_t>(instance.palette) < paletteHasMesh_.size() &&
                 paletteHasMesh_[static_cast<size_t>(instance.palette)]) {
                 bind = MatMul(
                     bind, paletteMeshWorld_[static_cast<size_t>(instance.palette)]);
             }
 
-            Matrix3 boneTm = options_.upAxisFix
+            Matrix3 boneTm = (options_.upAxisFix && !options_.engineSpace)
                                  ? boneNodes[i]->GetNodeTM(0)
-                                 : ToMatrix3(bind, options_.scale);
+                                 : ToMatrix3(MaxSpace(bind, options_.engineSpace),
+                                             options_.scale);
             skinImport->SetSkinTm(boneNodes[i], meshTm, boneTm);
         }
 
@@ -2041,6 +2276,57 @@ const float* SampleChannel(const Channel& channel, double timeMs,
 
 }  // namespace
 
+// ------------------------------------------------------------
+//  Controller tauschen, Bind-Pose behalten
+//
+//  UseLinearControllers setzt FRISCHE Controller ein - deren Wert
+//  ist die Einheitsmatrix, die Bind-Pose aus BuildModelNodes /
+//  BuildXBones ist danach weg. Bis 0.3.12 fiel das nicht auf, weil
+//  die Animation sofort jeden Knoten ueberschrieb. Mit Ruheframes
+//  sollte Frame 0 aber die Bind-Pose zeigen - tatsaechlich zeigte
+//  Max dort den ersten Animationsframe (vor dem ersten Key gilt
+//  dessen Wert), in 96 von 97 gehaeuteten Testdateien. Genau der
+//  "Sprung zwischen Frame 0 und 5", nach dem lange gesucht wurde,
+//  war damit gar nicht zu sehen - nur seine Folgen.
+//
+//  Deshalb: Weltmatrizen vorher merken, Controller tauschen,
+//  Eltern vor Kindern zuruecksetzen, Skin Pose ablegen und bei
+//  Ruheframes einen echten Key bei Frame 0 setzen.
+// ------------------------------------------------------------
+void SceneBuilder::SwapControllersKeepBind(const std::vector<int>& parents) {
+    std::vector<Matrix3> bind(nodes_.size());
+    std::vector<char> have(nodes_.size(), 0);
+    for (size_t i = 0; i < nodes_.size(); ++i) {
+        if (nodes_[i] == nullptr) continue;
+        bind[i] = nodes_[i]->GetNodeTM(0);
+        have[i] = 1;
+    }
+
+    for (INode* node : nodes_) UseLinearControllers(node);
+
+    const std::vector<int> order = ParentsFirst(parents);
+    for (int index : order) {
+        const size_t i = static_cast<size_t>(index);
+        if (i < have.size() && have[i]) nodes_[i]->SetNodeTM(0, bind[i]);
+    }
+
+    if (options_.storeSkinPose) StoreSkinPose(nodes_);
+
+    if (options_.restFrames > 0) {
+        AnimateGuard animate;
+        int keyed = 0;
+        for (int index : order) {
+            const size_t i = static_cast<size_t>(index);
+            if (i < have.size() && have[i]) {
+                nodes_[i]->SetNodeTM(0, bind[i]);
+                ++keyed;
+            }
+        }
+        Note(Msg() << L"Bind-Pose als Key bei Frame 0: " << keyed << L" Knoten ("
+                   << options_.restFrames << L" Ruheframes)");
+    }
+}
+
 void SceneBuilder::BuildModelAnimation(const ModelFile& file) {
     if (file.clips.empty()) return;
 
@@ -2055,8 +2341,14 @@ void SceneBuilder::BuildModelAnimation(const ModelFile& file) {
     //  Raster im ganzen Clip dasselbe ist.
     // ------------------------------------------------------------
     // Lineare Controller BEVOR der erste Key gesetzt wird - ein
-    // Controllerwechsel danach wirft die Keys weg.
-    for (INode* node : nodes_) UseLinearControllers(node);
+    // Controllerwechsel danach wirft die Keys weg. Die Bind-Pose
+    // bleibt dabei erhalten (SwapControllersKeepBind).
+    {
+        std::vector<int> parentsOfNodes(file.nodes.size());
+        std::transform(file.nodes.begin(), file.nodes.end(), parentsOfNodes.begin(),
+                       [](const ModelNode& node) { return node.parent; });
+        SwapControllersKeepBind(parentsOfNodes);
+    }
 
     keyStepMs_ = 0.0;
     if (options_.snapKeysToFrames) {
@@ -2207,6 +2499,35 @@ void SceneBuilder::BuildModelAnimation(const ModelFile& file) {
         alleZeiten.erase(std::unique(alleZeiten.begin(), alleZeiten.end()),
                          alleZeiten.end());
 
+        // ------------------------------------------------------------
+        //  Mit gerundeten Keyzeiten: auf dem FRAMERASTER abtasten
+        //
+        //  Die vereinigten Zeiten aller Kanaele liegen nicht auf dem
+        //  Raster - 157_skin11_huicheng.model: 0, 16, 25, 32, 33, 41
+        //  ms ... (6210 Zeitpunkte in einem 7-s-Clip). Gerundet
+        //  fielen 0 und 16 ms auf Frame 0, und der SPAETERE Wert
+        //  ueberschrieb den richtigen. An jedem Frame stand so ein
+        //  Wert bis zu einen halben Frame zu spaet; die rechte Hand,
+        //  die sich im ersten Intervall um 23 Grad dreht, stand bei
+        //  Frame 0 um 9 Grad falsch. Gemessen bis 0.3.12 in allen
+        //  .model-Dateien (Knotenvergleich gegen die Datei).
+        //
+        //  Jetzt wird jeder Kanal genau bei k * keyStepMs_
+        //  interpoliert. Die Keys der Datei auf dem Raster kommen
+        //  damit unveraendert durch, die anderen werden richtig
+        //  eingemischt statt sich gegenseitig zu ueberschreiben.
+        //  Nebenbei: rund 30-mal weniger SetNodeTM-Aufrufe.
+        // ------------------------------------------------------------
+        if (options_.snapKeysToFrames && keyStepMs_ > 0.0 && !alleZeiten.empty()) {
+            const double ende = alleZeiten.back();
+            const int letzter = static_cast<int>(std::ceil(ende / keyStepMs_ - 1e-6));
+            std::vector<double> raster;
+            raster.reserve(static_cast<size_t>(letzter) + 1);
+            for (int k = 0; k <= letzter; ++k)
+                raster.push_back(std::min(ende, static_cast<double>(k) * keyStepMs_));
+            alleZeiten.swap(raster);
+        }
+
         if (!alleZeiten.empty()) {
             std::vector<Matrix44> welt(file.nodes.size());
 
@@ -2276,9 +2597,11 @@ void SceneBuilder::BuildModelAnimation(const ModelFile& file) {
                                   ? MatMul(local, welt[static_cast<size_t>(source.parent)])
                                   : local;
 
-                    Matrix3 tm = ToMatrix3(welt[n], options_.scale);
+                    Matrix3 tm = ToMatrix3(MaxSpace(welt[n], options_.engineSpace),
+                                           options_.scale);
 
-                    if (options_.upAxisFix && source.parent < 0)
+                    if (options_.upAxisFix && !options_.engineSpace &&
+                        source.parent < 0)
                         tm = tm * ToMatrix3(UpAxisMatrix(), 1.0f);
 
                     nodes_[n]->SetNodeTM(t, tm);
@@ -2474,6 +2797,7 @@ bool SceneBuilder::ImportModel(const ModelFile& file,
 
     Note(Msg() << L"Knoten fertig (" << stats_.nodes << L"), baue Meshes ...");
     if (options_.buildMeshes) BuildModelMeshes(file);
+    TagModelGroups(file);
     Note(Msg() << L"Meshes fertig (" << stats_.meshes << L" Meshes, "
                << stats_.vertices << L" Vertices), baue Skin ...");
 
@@ -2488,6 +2812,11 @@ bool SceneBuilder::ImportModel(const ModelFile& file,
 
     Note(Msg() << L"Skin fertig (" << stats_.skinned
                << L" Meshes gewichtet), baue Animation ...");
+    if (options_.storeSkinPose && options_.buildSkeleton) {
+        Note(Msg() << L"Bind-Pose als Skin Pose abgelegt: "
+                   << StoreSkinPose(nodes_)
+                   << L" Knoten (Animation -> Assume Skin Pose holt sie zurueck)");
+    }
     if (options_.buildAnimation && options_.buildSkeleton) {
         BuildModelAnimation(file);
     }
@@ -2925,7 +3254,12 @@ bool SceneBuilder::BuildXSkin(const XFile& file) {
 // ============================================================
 
 void SceneBuilder::BuildXAnimation(const XFile& file) {
-    for (INode* node : nodes_) UseLinearControllers(node);
+    {
+        std::vector<int> parentsOfBones(file.bones.size());
+        std::transform(file.bones.begin(), file.bones.end(), parentsOfBones.begin(),
+                       [](const XBone& bone) { return bone.parent; });
+        SwapControllersKeepBind(parentsOfBones);
+    }
 
     // .x speichert je Bone einen Wert je Frame, ohne Zeitstempel -
     // das Raster ist dort per Definition ein Frame. Deshalb kein
@@ -3097,6 +3431,13 @@ bool SceneBuilder::ImportX(const XFile& file, const std::wstring& sourcePath) {
 
     Note(Msg() << L"Skin fertig (" << stats_.skinned
                << L" Meshes gewichtet), baue Animation ...");
+    // .x hat keine eigene Bind-Pose: Frame 0 IST sie (siehe
+    // README, "Drei Fallen beim .x"). Abgelegt wird also genau das,
+    // was BuildXBones gesetzt hat.
+    if (options_.storeSkinPose && options_.buildSkeleton) {
+        Note(Msg() << L"Bind-Pose als Skin Pose abgelegt: "
+                   << StoreSkinPose(nodes_) << L" Bones");
+    }
     if (options_.buildAnimation && options_.buildSkeleton) BuildXAnimation(file);
     Note(Msg() << L"fertig: " << stats_.keys << L" Keys");
 
@@ -3555,6 +3896,8 @@ int Eg3dImportInterface::SetOption(const MCHAR* name, int value) {
     else if (key == L"visibility") options_.visibilityTracks = on;
     else if (key == L"boneObjects") options_.boneObjects = on;
     else if (key == L"skipParticleTemplates") options_.skipParticleTemplates = on;
+    else if (key == L"engineSpace") options_.engineSpace = on;
+    else if (key == L"skinPose")   options_.storeSkinPose = on;
     else {
         SetError(Msg() << L"setOption: unbekannte Option '" << key << L"'.");
         return 0;

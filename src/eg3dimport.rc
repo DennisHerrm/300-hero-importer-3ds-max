@@ -1,0 +1,55 @@
+// ============================================================
+//  EG3D Import - Ressourcen
+//
+//  Die Oberflaeche liegt als RCDATA in der DLL. Beim Systemstart
+//  schreibt eg3dimport_dll.cpp sie in den Temp-Ordner und liest
+//  sie ein - damit laeuft das Plugin auch ohne installierte
+//  .mcr-Datei.
+//
+//  Eine INSTALLIERTE Datei hat Vorrang (siehe
+//  InstalledScriptExists): wer die .mcr von Hand aendert, soll
+//  seine Fassung sehen und nicht die eingebackene.
+// ============================================================
+
+// 1000 ist kMcrResourceId in eg3dimport_dll.cpp. Beide Stellen
+// muessen denselben Wert haben; ein Zahlendreher ergibt keinen
+// Fehler, sondern eine Oberflaeche, die einfach nicht kommt.
+1000 RCDATA "../scripts/Eg3dImport.mcr"
+
+// ------------------------------------------------------------
+//  Dateiversion der .dlu
+//
+//  Steht im Explorer unter Eigenschaften -> Details, und
+//  installer\BAUE_RELEASE.bat prueft damit, dass keine alte .dlu
+//  ins Release rutscht. Die Nummer kommt aus eg3d_version.h.
+// ------------------------------------------------------------
+#include <winver.h>
+#include "eg3d_version.h"
+
+1 VERSIONINFO
+FILEVERSION    EG3D_VERSION_MAJOR, EG3D_VERSION_MINOR, EG3D_VERSION_PATCH, 0
+PRODUCTVERSION EG3D_VERSION_MAJOR, EG3D_VERSION_MINOR, EG3D_VERSION_PATCH, 0
+FILEFLAGSMASK  0x3fL
+FILEFLAGS      0x0L
+FILEOS         VOS_NT_WINDOWS32
+FILETYPE       VFT_DLL
+FILESUBTYPE    VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName",      "DH"
+            VALUE "FileDescription",  "EG3D Import - 300 Heroes (.model / .x) for 3ds Max"
+            VALUE "FileVersion",      EG3D_VERSION_TEXT
+            VALUE "InternalName",     "Eg3dImport"
+            VALUE "OriginalFilename", "Eg3dImport.dlu"
+            VALUE "ProductName",      "EG3D Import for 3ds Max"
+            VALUE "ProductVersion",   EG3D_VERSION_TEXT
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

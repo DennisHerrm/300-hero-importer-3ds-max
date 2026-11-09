@@ -55,15 +55,19 @@ struct FrameCandidate {
 // Anteil exakt-normierter Rotationsschluessel und Medianabweichung.
 // Stichprobe wie in der Referenz: hoechstens 24 Bones, per
 // Schrittweite ausgewaehlt.
+//
+// rotOnly: die Adressen zeigen schon auf die Rotationsspur (zweite
+// Adressspalte), statt auf die Position davor.
 void QuaternionScore(const Cursor& block2, const std::vector<size_t>& addrs,
-                     int frames, double& unitShare, double& deviation) {
+                     int frames, double& unitShare, double& deviation,
+                     bool rotOnly = false) {
     std::vector<double> deviations;
     const size_t sample = 24;
     const size_t step = std::max<size_t>(1, addrs.size() / sample);
     size_t unitCount = 0, total = 0;
 
     for (size_t k = 0; k < addrs.size(); k += step) {
-        const size_t at = addrs[k] + static_cast<size_t>(frames) * 12;
+        const size_t at = addrs[k] + (rotOnly ? 0 : static_cast<size_t>(frames) * 12);
         if (at + static_cast<size_t>(frames) * 16 > block2.Size()) continue;
         for (int f = 0; f < frames; ++f) {
             const size_t q = at + static_cast<size_t>(f) * 16;
@@ -625,9 +629,39 @@ ReadResult ReadXBuffer(const uint8_t* data, size_t size,
         }
 
         if (sameDelta && delta > 0) {
-            if (delta % 12 == 0) {
-                out.frames = static_cast<int>(delta / 12);
-            } else if (delta % 4 == 0) {
+            // ------------------------------------------------------
+            //  Ein Abstand, der durch 12 UND 4 teilbar ist, ist
+            //  mehrdeutig: 636 Byte sind 53 float32-Keys oder 159
+            //  gepackte. Bis 0.3.12 wurde hier immer /12 genommen
+            //  und packedPos erst spaeter, nach der Rotationsmessung,
+            //  eingeschaltet - die Framezahl blieb dann aber auf
+            //  einem Drittel stehen. Acht Monster-Dateien
+            //  (monster_youlong.x, jiutoulong.x, ...) kamen so mit
+            //  53 statt 159 Frames an, und fast jeder Clip schrumpfte
+            //  auf einen einzigen Frame.
+            //
+            //  Jetzt wie im Blender-Addon: jede Deutung wird an der
+            //  Rotationsspur geprueft (float32-Quaternionen muessen
+            //  Einheitslaenge haben). Traegt keine, ist es die
+            //  komprimierte Variante mit Axis-Angle-Rotationen und
+            //  gepackten Positionen, also delta / 4 Frames.
+            // ------------------------------------------------------
+            std::vector<size_t> rotAddrs;
+            rotAddrs.reserve(addrs2.size());
+            for (int64_t a2 : addrs2) rotAddrs.push_back(static_cast<size_t>(a2));
+            for (int per : {12, 4}) {
+                if (delta % per != 0) continue;
+                const int f = static_cast<int>(delta / per);
+                if (f <= 0) continue;
+                double share = 0.0, dev = 1.0;
+                QuaternionScore(block2, rotAddrs, f, share, dev, true);
+                if (dev < 0.005) {
+                    out.frames = f;
+                    packedPos = (per == 4);
+                    break;
+                }
+            }
+            if (out.frames <= 0 && delta % 4 == 0) {
                 // Positionen gepackt. Die Rotation ist dann
                 // entweder float32-Quaternion oder Axis-Angle -
                 // das entscheidet die Groesse der Rotationsspur.
@@ -881,9 +915,13 @@ ReadResult ReadXBuffer(const uint8_t* data, size_t size,
                         static_cast<double>((packed >> 10) & 1023) / 1023.0;
                     const double qz =
                         static_cast<double>((packed >> 20) & 1023) / 1023.0;
-                    bone.pos[f].x = static_cast<float>(lo.x + qx * (hi.x - lo.x));
-                    bone.pos[f].y = static_cast<float>(lo.y + qy * (hi.y - lo.y));
-                    bone.pos[f].z = static_cast<float>(lo.z + qz * (hi.z - lo.z));
+                    // Die Boxweite in double bilden: hi - lo in float
+                    // rundet vor der Umwandlung und lag bis zu 1e-5
+                    // neben dem Blender-Addon.
+                    const double lx = lo.x, ly = lo.y, lz = lo.z;
+                    bone.pos[f].x = static_cast<float>(lx + qx * (static_cast<double>(hi.x) - lx));
+                    bone.pos[f].y = static_cast<float>(ly + qy * (static_cast<double>(hi.y) - ly));
+                    bone.pos[f].z = static_cast<float>(lz + qz * (static_cast<double>(hi.z) - lz));
                 }
             } else {
                 for (size_t f = 0; f < frames; ++f) {
@@ -1084,27 +1122,36 @@ ReadResult ReadXBuffer(const uint8_t* data, size_t size,
                     // der Box aus dem Deskriptor.
                     const uint32_t packed = block2.U32At(
                         static_cast<size_t>(aQPos) + static_cast<size_t>(v) * 4);
-                    const float fx = static_cast<float>(packed & 1023) / 1023.0f;
-                    const float fy =
-                        static_cast<float>((packed >> 10) & 1023) / 1023.0f;
-                    const float fz =
-                        static_cast<float>((packed >> 20) & 1023) / 1023.0f;
-                    mesh.positions[v].x = qLo.x + fx * (qHi.x - qLo.x);
-                    mesh.positions[v].y = qLo.y + fy * (qHi.y - qLo.y);
-                    mesh.positions[v].z = qLo.z + fz * (qHi.z - qLo.z);
+                    // In double rechnen wie das Blender-Addon; float
+                    // lag bis zu 1.7e-5 daneben.
+                    const double fx = static_cast<double>(packed & 1023) / 1023.0;
+                    const double fy =
+                        static_cast<double>((packed >> 10) & 1023) / 1023.0;
+                    const double fz =
+                        static_cast<double>((packed >> 20) & 1023) / 1023.0;
+                    const double lx = qLo.x, ly = qLo.y, lz = qLo.z;
+                    mesh.positions[v].x = static_cast<float>(lx + fx * (static_cast<double>(qHi.x) - lx));
+                    mesh.positions[v].y = static_cast<float>(ly + fy * (static_cast<double>(qHi.y) - ly));
+                    mesh.positions[v].z = static_cast<float>(lz + fz * (static_cast<double>(qHi.z) - lz));
 
                     // Normalen als int8x3, drei Byte statt zwoelf.
+                    // Nach dem Teilen durch 127 NORMIEREN: -128/127
+                    // ergibt sonst Laengen bis 1.0079, und schraege
+                    // Normalen sind nach dem Runden zu kurz.
                     if (aNrm3 >= 0) {
                         const size_t n3 = static_cast<size_t>(aNrm3) +
                                           static_cast<size_t>(v) * 3;
                         auto s8 = [&](size_t at) {
                             const int raw = static_cast<int>(block2.U8At(at));
-                            return static_cast<float>(raw >= 128 ? raw - 256 : raw) /
-                                   127.0f;
+                            return static_cast<double>(raw >= 128 ? raw - 256 : raw) /
+                                   127.0;
                         };
-                        mesh.normals[v].x = s8(n3);
-                        mesh.normals[v].y = s8(n3 + 1);
-                        mesh.normals[v].z = s8(n3 + 2);
+                        double nx = s8(n3), ny = s8(n3 + 1), nz = s8(n3 + 2);
+                        const double len = std::sqrt(nx * nx + ny * ny + nz * nz);
+                        if (len > 1e-12) { nx /= len; ny /= len; nz /= len; }
+                        mesh.normals[v].x = static_cast<float>(nx);
+                        mesh.normals[v].y = static_cast<float>(ny);
+                        mesh.normals[v].z = static_cast<float>(nz);
                     }
                 } else {
                     const size_t p = static_cast<size_t>(aPos) + static_cast<size_t>(v) * 12;

@@ -4,7 +4,7 @@ cd /d "%~dp0"
 
 echo.
 echo ========================================
-echo  EG3D Import 0.1.0 - Max 2016 bis 2027
+echo  EG3D Import - Max 2016 bis 2027  (Version steht in src\eg3d_version.h)
 echo ========================================
 echo.
 
